@@ -58,13 +58,55 @@ def setup_indoor_emotion():
         return False
 
 
+# def extract_egait_features(landmarks):
+#     mp_indices = [24, 23, 0, 0, 11, 13, 15, 12, 14, 16, 23, 25, 27, 24, 26, 28]
+#     features = []
+#     for index in mp_indices:
+#         landmark = landmarks[index]
+#         features.extend([landmark.x, landmark.y, landmark.z])
+#     return np.array(features)
+
 def extract_egait_features(landmarks):
-    mp_indices = [24, 23, 0, 0, 11, 13, 15, 12, 14, 16, 23, 25, 27, 24, 26, 28]
-    features = []
-    for index in mp_indices:
-        landmark = landmarks[index]
-        features.extend([landmark.x, landmark.y, landmark.z])
-    return np.array(features)
+    """
+    MediaPipeのランドマークからEmotion-Gaitデータセット(メートル単位)に準拠した
+    16関節の3D座標を生成し、腰を原点にセンタリングして返す。
+    """
+    # 各関節の3D座標(x,y,z)を取得するヘルパー関数
+    def get_pt(idx):
+        return np.array([landmarks[idx].x, landmarks[idx].y, landmarks[idx].z])
+
+    # 1. MediaPipeから必要なキーポイントを取得
+    nose = get_pt(0)
+    l_sh, r_sh = get_pt(11), get_pt(12)
+    l_el, r_el = get_pt(13), get_pt(14)
+    l_wri, r_wri = get_pt(15), get_pt(16)
+    l_hip, r_hip = get_pt(23), get_pt(24)
+    l_knee, r_knee = get_pt(25), get_pt(26)
+    l_ank, r_ank = get_pt(27), get_pt(28)
+
+    # 2. Emotion-Gait特有の関節を計算（中間点を取る）
+    root = (l_hip + r_hip) / 2.0     # 左右の腰の中間
+    neck = (l_sh + r_sh) / 2.0       # 左右の肩の中間
+    spine = (root + neck) / 2.0      # RootとNeckの中間（背骨）
+    head = nose                      # 鼻の位置をHeadの近似として使用
+
+    # 3. 仕様書の並び順通りに16関節のリストを作成
+    joints = [
+        root, spine, neck, head,
+        l_sh, l_el, l_wri,
+        r_sh, r_el, r_wri,
+        l_hip, l_knee, l_ank,
+        r_hip, r_knee, r_ank
+    ]
+    
+    coords = np.array(joints)
+
+    # 4. 空間の正規化（割り算は不要、センタリングのみ）
+    # Rootを厳密な原点 (0, 0, 0) に合わせる
+    coords_centered = coords - root
+
+    # 平坦化して (48,) の1次元配列にして返す
+    return coords_centered.flatten()
 
 
 def predict_indoor_emotion(frame, box_bounds, track_id):
